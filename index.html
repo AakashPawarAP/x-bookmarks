@@ -1,0 +1,35 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>X bookmarks</title>
+<style>
+  body{font:15px/1.45 system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;color:#111;background:#fff}
+  @media(prefers-color-scheme:dark){body{color:#eee;background:#111}a{color:#8cf}.card{border-color:#333}}
+  input{width:100%;font:inherit;padding:.6rem;box-sizing:border-box;margin-bottom:1rem}
+  .card{border:1px solid #ddd;border-radius:8px;padding:.8rem 1rem;margin-bottom:.8rem}
+  .meta{font-size:13px;opacity:.7;margin-bottom:.3rem}
+  .text{white-space:pre-wrap;word-break:break-word}
+  .card img{max-width:100%;border-radius:6px;margin-top:.5rem}
+  .links a{display:block;font-size:13px;margin-top:.3rem;word-break:break-all}
+</style>
+<h1>X bookmarks <small id="count" style="font-size:14px;font-weight:normal;opacity:.7"></small></h1>
+<input id="q" placeholder="search text, author, handle…" autofocus>
+<div id="list"></div>
+<script>
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let all=[];
+function render(){
+  const q=document.getElementById('q').value.toLowerCase();
+  const rows=q?all.filter(b=>(b.text+' '+b.author+' '+b.handle).toLowerCase().includes(q)):all;
+  document.getElementById('list').innerHTML=rows.slice(0,500).map(b=>`<div class="card">
+    <div class="meta"><b>${esc(b.author)}</b> @${esc(b.handle)} · <a href="${esc(b.url)}" target="_blank">${esc(b.created_at||'')}</a></div>
+    <div class="text">${esc(b.text)}</div>
+    ${(b.media||[]).map(m=>`<img loading="lazy" src="${esc(m)}">`).join('')}
+    <div class="links">${(b.urls||[]).map(u=>`<a href="${esc(u)}" target="_blank">${esc(u)}</a>`).join('')}</div>
+  </div>`).join('')+(rows.length>500?`<p>…${rows.length-500} more, refine search</p>`:'');
+  document.getElementById('count').textContent=`${rows.length} / ${all.length}`;
+}
+fetch('bookmarks.json').then(r=>r.json()).then(d=>{all=d.bookmarks;document.title=`X bookmarks (${all.length})`;render();
+  document.getElementById('count').textContent+=` · updated ${d.updated_at}`;});
+document.getElementById('q').oninput=render;
+</script>
