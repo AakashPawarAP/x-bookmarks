@@ -14,12 +14,12 @@
   #chips{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.8rem}
   .chip{border:1px solid var(--line);background:var(--chip);color:var(--fg);border-radius:999px;padding:.25rem .7rem;font:inherit;font-size:13px;cursor:pointer}
   .chip[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
-  .row{display:flex;gap:.8rem;padding:.7rem 0;border-bottom:1px solid var(--line)}
+  .row{display:flex;gap:.8rem;padding:.7rem .5rem;border-bottom:1px solid var(--line);cursor:pointer}
+  .row:hover{background:var(--chip)}
   .row .body{flex:1;min-width:0}
   .who{font-size:13px;color:var(--mute)}
   .who b{color:var(--fg)}
-  .text{white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer;margin:.15rem 0}
-  .text.open{-webkit-line-clamp:unset}
+  .text{white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;margin:.15rem 0}
   .links a{display:block;font-size:13px;word-break:break-all}
   .thumb{width:72px;height:72px;object-fit:cover;border-radius:6px;flex:none}
   select{font:inherit;font-size:13px;margin-top:.3rem;padding:.15rem .3rem;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
@@ -70,7 +70,7 @@ function renderList() {
   $('list').innerHTML = rows.slice(0, shown).map(b => {
     const c = catOf(b);
     const text = decode(b.text).replace(/https:\/\/t\.co\/\w+/g, '').trim();
-    return `<div class="row">
+    return `<div class="row" data-url="${esc(b.url)}" title="Open on X">
       ${b.media?.length ? `<a href="${esc(b.url)}" target="_blank" rel="noopener"><img class="thumb" loading="lazy" alt="" src="${esc(b.media[0])}?name=small"></a>` : ''}
       <div class="body">
         <div class="who"><b>${esc(b.author)}</b> @${esc(b.handle)} · <a href="${esc(b.url)}" target="_blank" rel="noopener">${esc((b.created_at || '').replace(/ \+0000/, ''))}</a></div>
@@ -139,7 +139,12 @@ $('q').oninput = () => { shown = PAGE; renderList(); };
 $('chips').onclick = e => { const c = e.target.closest('.chip')?.dataset.c; if (c) { active = c; shown = PAGE; renderChips(); renderList(); } };
 $('more').onclick = () => { shown += PAGE; renderList(); };
 $('save').onclick = save;
-$('list').onclick = e => e.target.classList.contains('text') && e.target.classList.toggle('open');
+$('list').onclick = e => {
+  // whole row opens the tweet; leave the dropdown, inner links and text selection alone
+  if (e.target.closest('select, a') || getSelection().toString()) return;
+  const row = e.target.closest('.row');
+  if (row) window.open(row.dataset.url, '_blank', 'noopener');
+};
 $('list').onchange = e => {
   const sel = e.target; if (sel.tagName !== 'SELECT') return;
   let c = sel.value;
