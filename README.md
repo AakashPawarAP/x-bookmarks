@@ -3,7 +3,12 @@
 All my X (Twitter) bookmarks, pulled every 6 hours by GitHub Actions and served by GitHub Pages.
 
 - `fetch.py` calls the same internal GraphQL endpoint the x.com web app uses and writes `bookmarks.json`.
-- `index.html` renders `bookmarks.json` with a search box.
+- `index.html` renders `bookmarks.json` as a searchable list with category filters.
+- `rules.js` auto-assigns a category (Trading, AI, Coding, Career, Business, Health, Trivia, Meme, Other)
+  from keywords, then by each author's usual topic. Check it with `node rules.test.js`.
+- `categories.json` holds your manual picks (`{"<tweet id>": "Category"}`) and always wins over the rules.
+  Change a bookmark's dropdown on the site, then click **Save to GitHub**. The first save asks for a
+  fine-grained token (Contents: read and write, this repo only), kept in that browser's localStorage.
 - `.github/workflows/sync.yml` runs the fetch on a cron and commits the result.
 
 ## One-time setup
