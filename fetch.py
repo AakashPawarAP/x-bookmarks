@@ -49,8 +49,14 @@ def page(auth_token, ct0, cursor):
         "cookie": f"auth_token={auth_token}; ct0={ct0}",
         "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
     })
-    with urllib.request.urlopen(req, timeout=30) as r:
-        data = json.load(r)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.load(r)
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            sys.exit(f"X rejected the login cookies (HTTP {e.code}). Copy fresh auth_token and ct0 cookies "
+                     "from x.com into the AUTH_TOKEN and CT0 repo secrets.")
+        raise
     instr = data["data"]["bookmark_timeline_v2"]["timeline"]["instructions"]
     entries = [e for i in instr for e in i.get("entries", [])]
     tweets = [x for x in (pick(e) for e in entries if e["entryId"].startswith("tweet-")) if x]
@@ -59,7 +65,9 @@ def page(auth_token, ct0, cursor):
 
 
 def main():
-    auth_token, ct0 = os.environ["AUTH_TOKEN"], os.environ["CT0"]
+    auth_token, ct0 = os.environ.get("AUTH_TOKEN"), os.environ.get("CT0")
+    if not auth_token or not ct0:
+        sys.exit("AUTH_TOKEN / CT0 are empty. Add them under repo Settings > Secrets and variables > Actions.")
     out, cursor, stale = {}, None, 0  # X's pages overlap, so key by tweet id (dict keeps insertion order)
     while True:
         tweets, cursor = page(auth_token, ct0, cursor)
