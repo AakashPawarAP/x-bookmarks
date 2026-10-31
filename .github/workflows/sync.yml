@@ -1,1 +1,30 @@
-x-bookmarks
+name: sync bookmarks
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: sync
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v7
+        with: { node-version: "22", cache: npm }
+      - run: python fetch.py
+        env:
+          AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
+          CT0: ${{ secrets.CT0 }}
+      - name: embed new bookmarks for smart search
+        run: npm ci && node embed.mjs
+      - run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add bookmarks.json embeddings.bin embeddings.json
+          git diff --cached --quiet && exit 0
+          git commit -m "sync $(date -u +%F)"
+          git pull --rebase && git push
