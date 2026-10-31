@@ -27,13 +27,15 @@
   button.act{font:inherit;font-size:13px;padding:.35rem .8rem;border-radius:6px;border:1px solid var(--line);background:var(--chip);color:var(--fg);cursor:pointer}
   #save:not(:disabled){background:var(--accent);border-color:var(--accent);color:#fff}
   #more{display:block;margin:1rem auto}
+  #searchopts{font-size:13px;color:var(--mute);margin:-.2rem 0 .6rem}
 </style>
 <header>
   <h1>X bookmarks</h1>
   <button id="save" class="act" disabled>Saved</button>
 </header>
 <div id="meta">loading…</div>
-<input id="q" type="search" placeholder="search text, author, handle…" aria-label="Search bookmarks">
+<input id="q" type="search" placeholder="search by meaning, e.g. “ai resources”, “stop loss strategy”…" aria-label="Search bookmarks">
+<div id="searchopts"><label><input type="checkbox" id="smart" checked> Smart search (by meaning)</label> <span id="status" role="status"></span></div>
 <div id="chips" role="toolbar" aria-label="Filter by category"></div>
 <div id="list"></div>
 <button id="more" class="act" hidden>Load more</button>
@@ -52,17 +54,83 @@ const catOf = b => local[b.id] ?? remote[b.id] ?? auto[b.id];
 const isManual = b => b.id in local || b.id in remote;
 const cats = () => [...new Set([...BUILTIN, ...Object.values(remote), ...Object.values(local)])];
 
+// --- search ---------------------------------------------------------------
+// Smart search: bge-small runs in the browser (transformers.js) to embed the query, then we rank every
+// bookmark by dot product with its precomputed int8 vector (embeddings.bin, built by embed.mjs).
+const TJS = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2';
+const QUERY_PREFIX = 'Represent this sentence for searching relevant passages: ';
+const MAX_HITS = 400;
+let ranked = null, index = null, searchSeq = 0, debounce;
+
+function ensureIndex() {
+  return index ||= (async () => {
+    $('status').textContent = 'loading smart search (~45 MB, once)…';
+    const [{ pipeline }, meta, bin] = await Promise.all([
+      import(TJS),
+      fetch('embeddings.json').then(r => r.json()),
+      fetch('embeddings.bin').then(r => r.arrayBuffer()),
+    ]);
+    const embed = await pipeline('feature-extraction', meta.model, { dtype: meta.dtype });
+    const row = new Map(meta.ids.map((id, i) => [id, i]));
+    return { embed, meta, vecs: new Int8Array(bin), row };
+  })().catch(e => { index = null; throw e; });
+}
+
+async function runSemantic(q) {
+  const seq = ++searchSeq;
+  let ix;
+  try { ix = await ensureIndex(); }
+  catch (e) { $('status').textContent = `smart search unavailable (${e.message}); using keyword match`; ranked = null; return render(); }
+  $('status').textContent = 'searching…';
+  const { data: qv } = await ix.embed(QUERY_PREFIX + q, { pooling: 'cls', normalize: true });
+  if (seq !== searchSeq) return; // a newer query started
+  const { vecs, row, meta: { dim, scale } } = ix;
+  const words = q.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const scored = [];
+  for (const b of all) {
+    const i = row.get(b.id);
+    if (i === undefined) continue; // not indexed yet (next sync embeds it)
+    let s = 0;
+    for (let k = 0, o = i * dim; k < dim; k++) s += qv[k] * vecs[o + k];
+    s /= scale;
+    if (words.length) { // small boost for literal matches so exact names (e.g. "vcp") still win
+      const t = `${b.text} ${b.handle}`.toLowerCase();
+      s += 0.04 * words.filter(w => t.includes(w)).length / words.length;
+    }
+    scored.push([s, b]);
+  }
+  scored.sort((a, b) => b[0] - a[0]);
+  ranked = scored.slice(0, MAX_HITS).map(x => x[1]);
+  $('status').textContent = `top ${ranked.length} by meaning`;
+  render();
+}
+
+function onQuery() {
+  shown = PAGE;
+  clearTimeout(debounce);
+  const q = $('q').value.trim();
+  if ($('smart').checked && q) { debounce = setTimeout(() => runSemantic(q), 350); return; }
+  searchSeq++; ranked = null; $('status').textContent = '';
+  render();
+}
+
+// bookmarks matching the search box, before the category filter
+function matched() {
+  const q = $('q').value.trim().toLowerCase();
+  if (!q) return all;
+  if ($('smart').checked && ranked) return ranked;
+  return all.filter(b => `${b.text} ${b.author} ${b.handle}`.toLowerCase().includes(q));
+}
+
 function filtered() {
-  const q = $('q').value.toLowerCase();
-  return all.filter(b => (active === 'All' || catOf(b) === active) &&
-    (!q || `${b.text} ${b.author} ${b.handle}`.toLowerCase().includes(q)));
+  return matched().filter(b => active === 'All' || catOf(b) === active);
 }
 
 function renderChips() {
-  const counts = {};
-  for (const b of all) counts[catOf(b)] = (counts[catOf(b)] || 0) + 1;
-  $('chips').innerHTML = ['All', ...cats()].filter(c => c === 'All' || counts[c])
-    .map(c => `<button class="chip" aria-pressed="${c === active}" data-c="${esc(c)}">${esc(c)} ${c === 'All' ? all.length : counts[c]}</button>`).join('');
+  const base = matched(), counts = {};
+  for (const b of base) counts[catOf(b)] = (counts[catOf(b)] || 0) + 1;
+  $('chips').innerHTML = ['All', ...cats()].filter(c => c === 'All' || counts[c] || c === active)
+    .map(c => `<button class="chip" aria-pressed="${c === active}" data-c="${esc(c)}">${esc(c)} ${c === 'All' ? base.length : counts[c] || 0}</button>`).join('');
 }
 
 function renderList() {
@@ -135,7 +203,8 @@ async function save() {
 }
 
 // --- events ---------------------------------------------------------------
-$('q').oninput = () => { shown = PAGE; renderList(); };
+$('q').oninput = onQuery;
+$('smart').onchange = onQuery;
 $('chips').onclick = e => { const c = e.target.closest('.chip')?.dataset.c; if (c) { active = c; shown = PAGE; renderChips(); renderList(); } };
 $('more').onclick = () => { shown += PAGE; renderList(); };
 $('save').onclick = save;

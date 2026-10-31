@@ -40,4 +40,7 @@ function categorizeAll(list) {
   return out;
 }
 
-if (typeof module !== 'undefined') module.exports = { RULES, decode, keywordCategory, categorizeAll };
+// Text the semantic-search model sees for a bookmark (embed.mjs and index.html must agree).
+const embedText = b => `${decode(b.text).replace(/https:\/\/t\.co\/\w+/g, '').trim()} ${(b.urls || []).join(' ')}`.trim() || `@${b.handle}`;
+
+if (typeof module !== 'undefined') module.exports = { RULES, decode, keywordCategory, categorizeAll, embedText };

@@ -6,6 +6,11 @@ All my X (Twitter) bookmarks, pulled every 6 hours by GitHub Actions and served 
 - `index.html` renders `bookmarks.json` as a searchable list with category filters.
 - `rules.js` auto-assigns a category (Trading, AI, Coding, Career, Business, Health, Trivia, Meme, Other)
   from keywords, then by each author's usual topic. Check it with `node rules.test.js`.
+- **Smart search** (on by default) ranks bookmarks by meaning, so "ai resources" finds posts sharing
+  courses, repos or guides even without those words. `embed.mjs` turns each bookmark into a vector with
+  the open `bge-small-en-v1.5` model (`embeddings.bin` + `embeddings.json`), and the page runs the same
+  model in the browser via transformers.js to embed your query. No API key, nothing leaves the browser.
+  The sync only embeds new bookmarks. Rebuild from scratch with `rm embeddings.*; npm ci; node embed.mjs`.
 - `categories.json` holds your manual picks (`{"<tweet id>": "Category"}`) and always wins over the rules.
   Change a bookmark's dropdown on the site, then click **Save to GitHub**. The first save asks for a
   fine-grained token (Contents: read and write, this repo only), kept in that browser's localStorage.
